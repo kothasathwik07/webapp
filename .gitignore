@@ -9,8 +9,8 @@ Maven Web App
 Click on File->New->Maven Project
 Type webapp in Filter and wait for artifacts to load, Select org.apache.maven.archetypes   maven-archetype-webapp 1.4 and click on next
 Mention TeamID: as SE, ArtifactID: MavenWeb and click on next
-Copy java servlet api latest version and add it under dependencies in pom.xml
-showview->servers, Select Tomcat v9.0 server/ Tomcat v11.0 server in the server type Click on next, select Apache Tomcat v9.0(optional)
+Copy java servlet api latest version and add it under dependencies in pom.xml from mvnrepository.com
+windows->showview->servers, Select Tomcat v9.0 server/ Tomcat v11.0 server in the server type Click on next, select Apache Tomcat v9.0(optional)
 Double click “servers” folder present at the left side in project explorer, click on Tomcat v9.0 server at localhost-config->tomcat-users.xml, scroll to the end and paste the following exactly above </tomcat-users> tag and close the tab.
 
 < role rolename="admin-gui,manager-gui ,manager-script,manager-jmx,manager-status"/><userpassword="1234"roles="manager-gui, admin-gui ,manager-script"username="admin"/>
@@ -202,6 +202,33 @@ in tomcat-users.xml:
 <role rolename="manager-jmx"/>
 <user username="admin" password="1234" roles="manager-gui,manager-script,manager-status,manager-jmx"/>
 
+
+#tomcan-users.xml (or paste this)
+<?xml version="1.0" encoding="UTF-8"?>
+<tomcat-users xmlns="http://tomcat.apache.org/xml"
+              xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+              xsi:schemaLocation="http://tomcat.apache.org/xml tomcat-users.xsd"
+              version="1.0">
+
+  <!-- REQUIRED roles for Jenkins deployment -->
+  <role rolename="manager-gui"/>
+  <role rolename="manager-script"/>
+  <role rolename="manager-status"/>
+  <role rolename="manager-jmx"/>
+
+  <!-- Optional default roles -->
+  <role rolename="tomcat"/>
+  <role rolename="role1"/>
+
+  <!-- Your admin Jenkins user -->
+  <user username="admin" password="1234"
+        roles="manager-gui,manager-script,manager-status,manager-jmx"/>
+
+</tomcat-users>
+#end of tomcat thing
+
+
+
 Jenkins script
 pipeline {
     agent any
@@ -316,3 +343,19 @@ git show <commit>            → Shows details of a specific commit
 
 git tag v1.0                 → Creates a version tag
 git push origin --tags       → Pushes tags to GitHub
+
+
+
+#minikube sql (not sure if it works)
+minikube start --driver=docker
+minikube status
+kubectl create deployment mymysql --image=mysql:latest --env="MYSQL_ROOT_PASSWORD=pass123"
+kubectl get deployments
+kubectl get pods
+kubectl describe pods
+kubectl expose deployment mymysql --type=NodePort --port=3306 --target-port=3306
+kubectl get service mymysql
+kubectl port-forward svc/mymysql 3306:3306
+kubectl get deployment
+kubectl scale deployment mymysql --replicas=3
+kubectl get pods

@@ -1,0 +1,168 @@
+exp1:
+1.What is an AWS EC2 Instance?
+An AWS EC2 instance is a virtual server in the cloud used to run applications.
+ It provides configurable computing resources such as CPU, memory, storage, and networking.
+ Users can launch, stop, resize, and terminate instances as needed and pay only for usage.
+2.Key Components of EC2
+The main components of EC2 include AMI, instance type, key pair, and security group.
+ AMI defines the operating system, while instance type decides CPU and RAM.
+ Key pairs enable secure login and security groups control network access.
+3.How EC2 Works
+EC2 works by launching a virtual machine on AWS data centers using a selected AMI.
+ AWS allocates hardware resources based on the chosen instance type.
+ Users connect to the instance using SSH or RDP to run applications.
+
+4.Uses of EC2
+EC2 is used for hosting websites and web applications.
+ It is widely used for development, testing, and academic projects.
+ EC2 also supports data processing, backend servers, and enterprise applications.
+
+5.Advantages of EC2
+EC2 is highly scalable and flexible according to user needs.
+ It is cost-effective because users pay only for what they use.
+ EC2 provides high security, reliability, and integration with other AWS services.
+
+6.Examples of EC2
+A student can use EC2 to practice Linux or deploy a project.
+ A company can host its website or backend services on EC2.
+ An e-commerce site can scale EC2 instances during high traffic periods.
+
+
+exp2:
+1. Your database server crashed. Data must be recovered fast. What do you do?
+ Restore the latest EBS snapshot and attach it to a new EC2 instance.
+ Start the database service to resume operations quickly.
+2. EC2 is deleted accidentally—how do you recover data?
+ Create a new EC2 instance and restore data from EBS snapshots.
+ Attach the restored volume to the new instance.
+3. Root volume deleted with EC2. How do you prevent this next time?
+ Disable the Delete on Termination option for the root EBS volume.
+ This ensures the volume is preserved even if EC2 is terminated.
+4. Disk is full in production EC2. What will you do?
+ Increase the EBS volume size and extend the filesystem.
+ Alternatively, attach a new EBS volume and move data.
+5. You want to migrate EC2 to another AWS region.
+ Create an AMI or snapshot and copy it to the target region.
+ Launch a new EC2 instance from it in the destination region.
+6. What happens to EBS when EC2 is stopped?
+ EBS volumes remain intact and data is preserved.
+ Only compute resources are stopped.
+7. What happens to EBS when EC2 is terminated?
+ Root EBS volume is deleted by default.
+ Additional EBS volumes remain unless configured otherwise.
+8. Application requires 20,000 IOPS. Which volume will you choose?
+ Provisioned IOPS SSD (io2 or io1) volume.
+ It supports high, consistent IOPS performance.
+9. Can one EBS volume attach to multiple EC2s?
+ Generally no, EBS supports attachment to only one EC2.
+ Exception: io1/io2 Multi-Attach within the same AZ.
+10. You deleted an EBS volume by mistake. How can you get it back?
+ Restore the volume from an existing snapshot.
+ Create a new volume using that snapshot.
+11. What happens if a snapshot used by a volume is deleted?
+ The existing volume continues to work normally.
+ Only future restores from that snapshot become impossible.
+12. Where are EBS snapshots stored?
+ EBS snapshots are stored in Amazon S3.
+ They are managed by AWS and are region-specific.
+
+
+exp3:
+1. Multiple EC2 instances across different Availability Zones must read and write the same files at the same time. Which AWS storage service fits this requirement and why?
+ Amazon Elastic File System (EFS) is the correct service because it is a regional, shared file system that allows multiple EC2 instances across Availability Zones to simultaneously read and write data using the NFS protocol.
+2. An application running on EC2 in three different AZs needs a shared file system with low operational overhead. How would EFS support this setup?
+ EFS automatically creates mount targets in each Availability Zone and manages scaling, replication, and availability, allowing EC2 instances in all AZs to access the same data without manual administration.
+3. You mounted an EFS file system on one EC2 instance. Can another EC2 instance modify the same file simultaneously? What happens in such a scenario?
+ Yes, EFS supports concurrent access from multiple EC2 instances. File locking and consistency are handled by the NFS protocol to prevent data corruption.
+4. Your team tried to attach an EFS file system to an EC2 instance, but the mount command timed out. What networking components would you check first?
+ You should verify that EFS mount targets exist in the instance’s Availability Zone and ensure the security group allows inbound NFS traffic on port 2049.
+5. An EC2 instance in a private subnet is unable to mount EFS. What configuration might be missing at the subnet or VPC level?
+ The private subnet may lack proper routing to the EFS mount target or the security group may not allow NFS traffic within the VPC.
+6. You created an EFS file system but forgot to create mount targets in all AZs. How will this affect EC2 instances in those AZs?
+ EC2 instances in Availability Zones without mount targets will be unable to mount the EFS file system, causing mount failures or timeouts.
+7. Why does EFS require mount targets in each Availability Zone, and what happens if one AZ goes down?
+ Mount targets provide local network endpoints for EC2 instances in each AZ. If one AZ fails, instances in other AZs continue accessing EFS normally.
+8. Two applications in different subnets need access to the same EFS file system. How should the EFS networking and security groups be configured?
+ Both subnets must be in the same VPC, and the EFS mount targets and EC2 instances should share a security group that allows NFS traffic on port 2049.
+9. Your security team wants only specific EC2 instances to access EFS. How can security groups be used to enforce this?
+ The EFS security group can restrict inbound NFS access to only the security groups attached to authorized EC2 instances.
+10. While mounting EFS, the command specifies -t nfs4. Why does EFS use NFS, and what advantage does it provide?
+ EFS uses the NFS protocol because it supports shared, concurrent file access and POSIX file permissions across multiple EC2 instances.
+11. An organization wants to migrate from EBS to EFS because multiple EC2 instances need concurrent access to data. What limitation of EBS is driving this decision?
+ EBS volumes can be attached to only one EC2 instance at a time, whereas EFS supports simultaneous access from multiple instances.
+12. An application team complains about increased latency when accessing EFS from EC2. What factors related to networking or AZ placement should be considered?
+ Latency can increase if EC2 instances access EFS across Availability Zones or if network congestion and security group misconfigurations exist.
+13. Can an EFS file system be accessed from EC2 instances in different VPCs? If yes, what networking setup is required?
+ Yes, EFS can be accessed across VPCs using VPC peering or AWS Transit Gateway, along with proper routing and security group rules.
+
+
+exp4:
+1.A developer uploads an object to an S3 bucket but cannot access it from the browser, even though the bucket exists. What permission-related issue could be the cause?
+Ans: The object likely does not have public read permission. By default, S3 objects are private and may require a bucket policy or ACL to allow access. S3 Block Public Access could also be preventing access.
+2.An S3 bucket policy allows public read access, but a specific object inside the bucket is still not accessible. Why might this happen?
+Ans: The specific object may have restrictive ACL settings overriding access. S3 Block Public Access settings might be blocking the public policy. An explicit deny in a policy can also prevent access.
+3.A bucket has no bucket policy, but individual objects have public ACLs. Will users be able to access those objects? What determines the final access decision?
+Ans: Yes, users can access those objects if public ACLs allow it. Final access is determined by bucket policy, object ACL, IAM policies, and Block Public Access settings together. Any explicit deny overrides allows.
+4.A company wants to ensure no public access to any object in an S3 bucket, even if someone mistakenly applies a public ACL. What S3 feature should be enabled?
+Ans: Enable S3 Block Public Access at the bucket or account level. This prevents any public ACL or policy from granting access. It ensures complete protection from accidental public exposure.
+5.You attempt to create an S3 bucket named my-company-data but receive a naming error. What S3 bucket naming rules might have been violated?
+Ans: The bucket name may not follow S3 naming rules. Names must be globally unique, 3–63 characters, lowercase, and DNS-compliant. Uppercase letters or invalid characters cause errors.
+6.Two different AWS accounts try to create a bucket named project-backup-2026. One succeeds, the other fails. Why?
+Ans: S3 bucket names are globally unique across all AWS accounts. Once one account creates the bucket, no other account can use the same name. Therefore, the second account fails.
+7.You enabled static website hosting on an S3 bucket and uploaded files, but accessing the website URL returns 403 Forbidden. What is the most likely cause?
+Ans: The most likely cause is missing public read permissions on the objects. Static website hosting requires objects to be publicly accessible. Block Public Access may also be enabled.
+8.Static website hosting is enabled, but accessing the root URL shows an error saying index.html not found. What is the actual issue?
+Ans: The index document is either not uploaded or incorrectly configured. S3 requires the exact file name (e.g., index.html) to be set in website settings. If missing, the root URL fails.
+9.What HTTP error is returned when the index document is missing in S3 static website hosting, and why does this happen?
+Ans: A 404 Not Found error is returned. This happens because S3 cannot find the configured index document at the root path. Without it, the website endpoint cannot serve content.
+10.A bucket policy allows public access, but static website hosting still doesn’t work. What object-level setting must also be verified?
+Ans: The object-level ACL must allow public read access if ACLs are being used. Also verify that Block Public Access is not enabled. Object permissions must align with the bucket policy.
+11.You accidentally overwrite an important object in S3. Versioning was enabled earlier. How can the original file be recovered?
+Ans: Go to the object’s version history in the S3 console. Select the previous version and restore or download it. Versioning preserves older versions unless permanently deleted.
+12.A user deletes an object from a versioned S3 bucket. Is the data permanently removed? Explain what actually happens.
+Ans: No, the data is not permanently removed. S3 adds a delete marker while older versions remain stored. The object can be restored by deleting the delete marker.
+13.You enabled Cross-Region Replication (CRR) on a bucket, but objects are not replicating. What configuration might be missing?
+Ans: Versioning must be enabled on both source and destination buckets. An IAM role with proper replication permissions must also be configured. Without these, CRR will not work.
+14.After enabling CRR, only newly uploaded objects are replicated, but old objects are not. Why?
+Ans: CRR replicates only objects uploaded after replication is enabled. Existing objects are not automatically copied. S3 Batch Replication is needed for old objects.
+15.A company wants to replicate S3 data to another region for disaster recovery and compliance. What are the key prerequisites for enabling CRR?
+Ans: Both buckets must have versioning enabled. The destination bucket must be in a different region. An IAM role and replication rule must be properly configured.
+
+
+
+exp5:
+1. You have a web application where users access a website, but the database should not be exposed to the internet. How would you design the VPC? Which resources go into public and private subnets?
+Ans: Public subnets host internet-facing resources like Load Balancers and NAT Gateways. Private subnets host application servers and databases. The database remains in a private subnet with no route to an Internet Gateway for security.
+An EC2 instance in a public subnet cannot access the internet. What VPC components would you check and why?
+Ans: Check whether the subnet route table has a 0.0.0.0/0 route to an Internet Gateway, the IGW is attached to the VPC, the instance has a public IP, and security groups/NACLs allow outbound and return traffic.
+Your application server needs to connect to an RDS database securely. How would you configure security groups and subnets?
+Ans: Place both resources in private subnets and allow database inbound access only from the application server’s security group.
+You are asked to design a VPC for 500 servers today, but it should scale to 2,000 servers in the future. How would you choose the CIDR block?
+Ans: Choose a large CIDR block such as /16 to support future growth, multiple subnets, and Availability Zones.
+A company wants secure connectivity between its on-premises data center and AWS VPC. Which AWS services would you choose and why (VPN vs Direct Connect)?
+Ans: Use Site-to-Site VPN for quick, low-cost encrypted connectivity and Direct Connect for high bandwidth, low latency, and stable long-term connections.
+You need to connect two VPCs, but both use the same CIDR range. How would you solve this problem?
+Ans: Use NAT with Transit Gateway or redesign one VPC’s CIDR since VPC peering does not support overlapping CIDR ranges.
+Multiple microservices running in different subnets need to communicate securely. How would you design routing and security groups?
+Ans: Use default local routing within the VPC and restrict access using security groups that allow only required service-to-service traffic.
+Design a VPC for a 3-tier application (Web, App, DB) with high security and scalability. Explain subnets, route tables, gateways, and security groups.
+Ans: Web tier in public subnets with IGW access, App and DB tiers in private subnets, NAT Gateway for outbound access, and security groups allowing only tier-to-tier communication
+You suspect unusual traffic inside your VPC. How would you monitor and analyze network traffic?
+Ans: Enable VPC Flow Logs and analyze them using CloudWatch Logs or Athena.
+Why can’t a private subnet have an Internet Gateway directly attached?
+Ans: Internet Gateways attach to VPCs, not subnets; a subnet is private if its route table does not point to an IGW.
+What happens if route tables are misconfigured in a VPC?
+Ans: Traffic may fail to reach its destination, causing loss of internet access or broken internal communication.
+What happens if a route table has no local route?
+Ans: This cannot happen because AWS automatically adds a local route for VPC internal traffic.
+An EC2 instance allows traffic on port 80 in the security group, but traffic is still blocked. What could be the reason?
+Ans: The Network ACL or route table may be blocking traffic, or the instance may not have a public IP.
+
+You need to create a VPC that will host 1,000+ EC2 instances across multiple AZs. How do you decide the CIDR block?
+Ans: Select a large CIDR block such as /16 to support scalability and multiple subnets across AZs.
+
+Only a company’s corporate IP should be able to SSH into EC2 instances. How would you implement this securely in AWS VPC?
+Ans: Restrict SSH (port 22) in the security group to the company’s public IP range or use a bastion host.
+
+An EC2 instance can send traffic out but cannot receive responses. Which VPC component might be misconfigured and why?
+Ans: The instance may lack a public IP or the Network ACL may be blocking inbound ephemeral ports.

@@ -1,0 +1,308 @@
+Exp-7 — S3-DynamoDB Integration
+Create an S3 bucket normally.
+Create a DynamoDB table with a partition key as id.
+Create a Lambda function: Author from scratch, Role: LabRole, Runtime: Python.
+Add trigger to Lambda: Select S3 in trigger config, select the bucket.
+In the Lambda code, put this:
+import boto3
+from uuid import uuid4
+
+def lambda_handler(event, context):
+    s3 = boto3.client("s3")
+    dynamodb = boto3.resource('dynamodb')
+    
+    # Check if the 'Records' key is present in the event
+    if 'Records' in event:
+        # Iterate over each record in the event
+        for record in event['Records']:
+            bucket_name = record['s3']['bucket']['name']
+            object_key = record['s3']['object']['key']
+            size = record['s3']['object'].get('size', -1)
+            event_name = record.get('eventName', 'Unknown')
+            event_time = record.get('eventTime', 'Unknown')
+            
+            dynamoTable = dynamodb.Table('table-name')
+            dynamoTable.put_item(
+                Item={
+                    'id': str(uuid4()), 
+                    'Bucket': bucket_name, 
+                    'Object': object_key,
+                    'Size': size, 
+                    'Event': event_name, 
+                    'EventTime': event_time
+                })
+    else:
+        # Log a message indicating that the 'Records' key is missing
+        print("No 'Records' key found in the event.")
+Click Deploy.
+Upload something in the S3 bucket, then click Explore Items in DynamoDB, click Run.
+In Lambda, show logs if asked.
+
+
+
+
+Exp-8 — SNS & SQS
+Part 1: SNS Email Notification
+Create SNS with any name, Type: Standard.
+Create subscription: Protocol: Email, Endpoint: your email.
+Confirm subscription from email.
+Publish message: Put something in subject and body, then send.
+Part 2: S3 to SNS Integration
+Create S3 bucket normally.
+Edit access policy of SNS and put this:
+{
+  "Version": "2012-10-17",
+  "Id": "example-ID",
+  "Statement": [
+    {
+      "Sid": "Example SNS topic policy",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "s3.amazonaws.com"
+      },
+      "Action": [
+        "SNS:Publish"
+      ],
+      "Resource": "SNS topic ARN",
+      "Condition": {
+        "ArnLike": {
+          "aws:SourceArn": "s3 bucket ARN"
+        },
+        "StringEquals": {
+          "aws:SourceAccount": "account id"
+        }
+      }
+    }
+  ]
+}
+Open S3 → Properties → Event Notification → Create Event Notification.
+Event name: any name, Event type: All objects create events, Destination: SNS topic.
+Test by uploading something, check email.
+Part 3: SQS Basic Operations
+Create SQS, Type: Standard, any name.
+Click Send and Receive Messages, message body: some message, click Send.
+Poll messages to see the message, you can delete also.
+Part 4: S3 → SNS → SQS → Lambda Pipeline
+Create S3, SNS, SQS normally.
+Create subscription in SNS: Protocol: SQS, Endpoint: SQS ARN.
+Add access policy in SQS by editing and putting:
+{
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "sns.amazonaws.com"
+      },
+      "Action": "sqs:SendMessage",
+      "Resource": "SQS ARN",
+      "Condition": {
+        "ArnEquals": {
+          "aws:SourceArn": "SNS ARN"
+        }
+      }
+    }
+  ]
+}
+Add access policy in SNS also:
+{
+  "Version": "2012-10-17",
+  "Id": "example-ID",
+  "Statement": [
+    {
+      "Sid": "Example SNS topic policy",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "s3.amazonaws.com"
+      },
+      "Action": [
+        "SNS:Publish"
+      ],
+      "Resource": "SNS topic ARN",
+      "Condition": {
+        "ArnLike": {
+          "aws:SourceArn": "S3 bucket ARN"
+        },
+        "StringEquals": {
+          "aws:SourceAccount": "Account ID"
+        }
+      }
+    }
+  ]
+}
+Open S3 → Properties → Event Notification → Event name: S3UploadEvent, Event type: All object create events, Destination: SNS topic.
+Test by uploading something in S3, poll messages from SQS.
+Configure Lambda: Create Lambda function normally, add trigger: SQS, select your SQS.
+Lambda code:
+def lambda_handler(event, context):
+    for record in event['Records']:
+        print("Message received from SQS:")
+        print(record['body'])
+    
+    return {
+        'statusCode': 200,
+        'body': 'Message processed successfully'
+    }
+Deploy, upload something in S3, and this will trigger everything. Watch logs in Lambda.
+
+
+
+
+Exp-9 — ELB + Auto Scaling
+Part 1: EC2 + Load Balancer
+1) Create EC2 Instances (2 servers)
+Launch instance → Amazon Linux → t2.micro
+
+Security group:
+
+SSH (22) → your IP
+HTTP (80) → anywhere
+Run in both:
+
+sudo su
+yum update -y
+yum install httpd -y
+systemctl start httpd
+systemctl enable httpd
+Server 1:
+
+echo "This is Server 1" > /var/www/html/index.html
+Server 2:
+
+echo "This is Server 2" > /var/www/html/index.html
+Result: 2 working web servers
+
+2) Create Load Balancer
+Security group: EC2 → Security Groups → Create Security Group, allow HTTP, HTTPS traffic.
+Create Load Balancer: EC2 → Load Balancers → Create Load Balancer → Application Load Balancer (everything default), select all AZ, attach the above security group.
+Create new target group: Put name, other default.
+Register targets: Attach the instances.
+Add the target group to load balancer.
+3) Test
+Copy DNS of LB
+Open in browser
+Refresh → alternates servers
+Output: traffic distributed
+Part 2: Auto Scaling
+1) Create AMI
+EC2 → Select instance
+Actions → Image → Create Image
+Name: anything
+This is your base template
+2) Create Launch Template
+EC2 → Launch Templates → Create
+
+Config:
+
+AMI → select created AMI
+Instance type → t2.micro
+Key pair → select
+Security group → allow HTTP
+3) Create Auto Scaling Group
+EC2 → Auto Scaling Groups → Create
+
+Config:
+
+Launch template → select
+VPC + subnets → select all
+4) Attach Load Balancer
+Select:
+
+Existing Load Balancer
+Target group
+Health check:
+
+Type → HTTP
+Grace period → 300 sec
+5) Set Capacity
+Desired: 2
+Min: 1
+Max: 4
+6) Create ASG
+Review → Create
+
+Part 3: Testing
+1) Check Instances
+Target group → healthy instances
+ASG → instances running
+2) Test Auto Healing
+Terminate one instance
+Result: ASG launches new instance automatically
+3) Test Load Balancing
+Open LB DNS
+Refresh
+
+
+
+
+Exp-10 — Elastic Beanstalk
+Create Elastic Beanstalk, some name.
+Create environment → Web server environment.
+Platform: Tomcat.
+Upload WAR code from: https://tomcat.apache.org/tomcat-6.0-doc/appdev/sample/
+Role: LabRole, Key pair: select.
+Configure network: VPC (default), Subnets, Enable public IP.
+Instance: t2.micro, Type: Load Balancer, Min: 1, Max: 2.
+Create.
+Open the URL (domain link).
+Upload and Deploy → Upload same with different version label, and open URL again.
+
+
+
+
+Exp-11 — Amazon Lex
+Open Lex → Create bot → Name (everything default).
+Intent → Some name → Add utterances:
+I want to book a hotel
+Book a room
+Reserve hotel
+I need a room
+Create slots:
+age → number → question
+Advanced → Branch → if {age} < 18 → message: not eligible
+More slots: city, date, nights
+Custom slot:
+Slot types → Add slot type → Add blank slot type
+RoomType: single, double, suite
+Add slot RoomType, Advanced → Slot prompts → More prompt options → Add → Add card groups → button.
+Initial Response:
+Welcome to Hotel Booking! What is your name?
+Confirmation:
+Do you want to confirm booking in {location} for {nights} nights?
+Build → Test.
+
+
+
+
+Exp-12 — Creating IAM User with Permissions
+IAM → IAM users → Create → Name → Provide user access (tick).
+Give credentials, Access: AmazonS3FullAccess.
+Login, try creating EC2 (will not happen), create bucket.
+IAM → Users → Security credentials → Create access key → CLI.
+In CMD on your system:
+aws configure
+Enter:
+
+Access Key ID
+Secret Access Key
+Default region: (e.g., ap-south-1)
+Default output: json
+Run commands:
+
+aws s3 ls
+aws s3 mb s3://your-unique-bucket-name
+aws iam list-users   (won't work)
+
+
+
+
+Exp-13 — IAM Roles
+IAM Console → Roles → Create role.
+Use case: Choose EC2.
+Permissions: AmazonS3FullAccess.
+Name (something), Create.
+Create EC2 instance normally.
+Actions → Security → Modify IAM role.
+Select EC2-S3-Role → Update.
+Connect to EC2 and run:
+aws s3 ls
+aws ec2 describe-instances   (doesn't work)

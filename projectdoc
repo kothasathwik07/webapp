@@ -46,7 +46,8 @@ Part 1: SNS Email Notification
 Create SNS with any name, Type: Standard.
 Create subscription: Protocol: Email, Endpoint: your email.
 Confirm subscription from email.
-Publish message: Put something in subject and body, then send.
+Publish message: Put something in subject and body, then send. 
+
 Part 2: S3 to SNS Integration
 Create S3 bucket normally.
 Edit access policy of SNS and put this:
@@ -78,10 +79,12 @@ Edit access policy of SNS and put this:
 Open S3 → Properties → Event Notification → Create Event Notification.
 Event name: any name, Event type: All objects create events, Destination: SNS topic.
 Test by uploading something, check email.
+
 Part 3: SQS Basic Operations
 Create SQS, Type: Standard, any name.
 Click Send and Receive Messages, message body: some message, click Send.
 Poll messages to see the message, you can delete also.
+
 Part 4: S3 → SNS → SQS → Lambda Pipeline
 Create S3, SNS, SQS normally.
 Create subscription in SNS: Protocol: SQS, Endpoint: SQS ARN.
@@ -177,17 +180,20 @@ Create Load Balancer: EC2 → Load Balancers → Create Load Balancer → Applic
 Create new target group: Put name, other default.
 Register targets: Attach the instances.
 Add the target group to load balancer.
+
 3) Test
 Copy DNS of LB
 Open in browser
 Refresh → alternates servers
 Output: traffic distributed
 Part 2: Auto Scaling
+
 1) Create AMI
 EC2 → Select instance
 Actions → Image → Create Image
 Name: anything
 This is your base template
+
 2) Create Launch Template
 EC2 → Launch Templates → Create
 
@@ -197,6 +203,7 @@ AMI → select created AMI
 Instance type → t2.micro
 Key pair → select
 Security group → allow HTTP
+
 3) Create Auto Scaling Group
 EC2 → Auto Scaling Groups → Create
 

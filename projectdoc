@@ -1,3 +1,146 @@
+Exp-1 — EC2 Access
+a) Connect using PuTTY (.ppk)
+Create an EC2 with a key pair of .ppk, copy the IP of it.
+Open PuTTY, paste the IP.
+Left side: Connection → SSH → Auth → Credentials, browse the .ppk and click Open.
+If Linux login as: ec2-user, if Ubuntu login as: ubuntu.   Test: whoami (console)
+b) Convert .pem to .ppk
+Convert .pem file to .ppk using PuTTYGen, save as private key file, then follow the same process as above.
+
+c) RDP (Windows EC2)
+Create an EC2 — in security groups add RDP in the custom TCP, select OS: Windows.
+Click on Connect → using RDP client → click Get Password → upload the .pem file to decrypt.
+Click the Windows symbol and search RDP, paste the IP of the EC2.
+Login as Administrator, password: decrypted password.
+You can see the new system.
+
+
+
+Exp-2 — Volumes & Snapshots
+Volumes
+a) Attach a Volume
+Create an EC2, select an AZ.
+Create a volume with the same AZ, size anything.
+Attach volume to the running EC2, device name: /dev/sdf.
+Open EC2 console and run lsblk.
+b) Format and Mount the Volume
+After attaching and connecting to EC2:
+
+sudo su
+lsblk -fs
+fdisk /dev/nvme1n1    (m, n, p, , , , w)
+lsblk
+mkfs.xfs /dev/nvme1n1p1
+mkdir /mnt/vish
+mount /dev/nvme1n1p1 /mnt/vish
+df -h
+blkid /dev/nvme1n1p1
+(COPY UUID)
+nano /etc/fstab
+(inside that, last line add) =UUID=<UUID-value>   /mnt/vish   xfs   defaults,nofail   0   0
+mount -a
+reboot and check for files
+c) Move Volume to Another EC2
+Create another EC2 with the same AZ.
+Detach the volume from the old EC2 and attach to the new one.
+Connect to the new EC2 and run:
+sudo su
+mkdir /mnt/vish
+mount /dev/nvme1n1p1 /mnt/vish
+lsblk -fs
+Snapshots
+For a given volume you created, click on Actions → Create Snapshot.
+From the Snapshots section, click on Copy Snapshot and select some region.
+Switch to that region and create a volume for it from Actions.
+Attach an EC2 in that region to the created volume with the same AZ. (run lsblk if needed)
+
+
+
+Exp-3 — EFS (Elastic File System)
+Create 2 EC2s with 2 different availability zones and include NFS in the custom TCP.
+Create a new security group (NFS) and attach it to the EFS
+Create an EFS with only 2 availability zones.
+Open consoles of both EC2s.
+Run the following commands on both:
+sudo su
+mkdir efs
+yum install -y amazon-efs-utils
+(connect the efs with dns) efs → connect → dns → paste in console
+cd efs
+in any 1 do: nano h.txt and put text
+(it shows in the other EC2)
+
+
+
+
+EXP-4 — S3
+a) Public Access to S3 Object
+Create an S3 bucket, allow ACLs under ownership.
+Block all public access — uncheck that (very important).
+Enable versioning (better, because others need it).
+After creation: Bucket → Permissions → ACL → Public Access → right side tick.
+Upload any image, click on it → Permissions → ACL → Public Access → left and right tick.
+Properties → Copy link → open in incognito.
+b) Versioning
+Enable versioning (compulsory).
+Upload a text file, change it locally, and upload again.
+Buckets → Objects → click Show Versions → you can see both versions.
+Delete the latest version and the old version still shows up.
+c) Cross Region Replication
+Create 1 more bucket in a different region with the same process including versioning enabled.
+Go to first bucket → Management → Replication Rules.
+Status = Enable, Source bucket = Apply to all objects, Destination bucket = select the created one, IAM Role = Lab Role. Replicate existing objects → No (this option comes after creating).
+Upload any file in bucket 1 — it will automatically show in the 2nd bucket.
+d) Static Website Hosting
+Upload index.html and error.html into S3 following the normal process including ACL settings and allowing static hosting. Put index and error filenames in the fields.
+Click on index.html → Permissions → Everyone → both tick. Same with error.html.
+Bucket → Properties → scroll to Static Website Hosting → copy URL → check.
+
+
+
+
+EXP-5 — VPC
+Create a VPC, CIDR: 10.0.0.0/16.
+Create subnets:
+Public: AZ-east-1a, subnet CIDR: 10.0.1.0/24
+Private: AZ-east-1a, subnet CIDR: 10.0.2.0/24
+Create an Internet Gateway, attach the VPC (shown after creation).
+Create Route Tables:
+Public: Create → Actions → Edit Routes → Add Route → Destination: 0.0.0.0/0, Internet Gateway (custom made) → Actions → Edit Subnet Associations → add the public subnet.
+Private: Create → Actions → Edit Subnet Associations → add the private subnet.
+Public subnet → Actions → Edit Subnet Settings → Auto-assign IP (tick).
+Create a security group, add the custom VPC under creation, inbound rules: SSH, HTTP, HTTPS.
+Create an EC2 for the public subnet: Edit Network → VPC (custom), Subnet: public, select existing security group: custom made.
+Do the same for the EC2 of the private subnet.
+Connecting to both: public subnet EC2 will connect, private will not.
+
+
+
+
+Exp-6 — Bastion Server
+Follow the same process as Exp-5 until creation of the route tables.
+Create an Elastic IP.
+Create a NAT Gateway: Method of Elastic IP → Manual, select the created IP.
+Attach the NAT Gateway to the private route table.
+Create 2 EC2 instances for public and private subnets and attach the 2 subnets.
+Open the public EC2 instance and connect it via SSH. In the terminal where .pem file is located, run:
+ssh -i "key.pem" ec2-user@<public-ip>
+Open another terminal and copy the key to the public EC2:
+scp -i yourkey.pem yourkey.pem ec2-user@<public-ip>:~
+In terminal 1 (connected to public EC2), run:
+chmod 400 yourkey.pem
+Open the EC2 with private subnet and connect it via SSH command from terminal 1:
+ssh -i yourkey.pem ec2-user@<private-ip>
+After connection success, run to check internet access:
+ping google.com
+
+
+
+
+
+
+
+
 Exp-7 — S3-DynamoDB Integration
 Create an S3 bucket normally.
 Create a DynamoDB table with a partition key as id.

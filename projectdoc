@@ -1,3 +1,221 @@
+#exp 1
+
+import numpy as np
+import matplotlib.pyplot as plt
+import cv2#cv2 is the Python interface of OpenCV.
+
+# a) Generate a grid of random pixel intensities
+random_grid = np.random.rand(100, 100)
+print(random_grid)
+plt.figure(figsize=(4, 3))#figsize sets the size of the figure in inches.(4, 3) means 4 inches wide and 3 inches high.
+plt.imshow(random_grid, cmap='gray')#cmap = color map,cmap='gray'.Low values (near 0) → black.High values (near 1) → white
+It defines how numerical values are mapped to colors.
+plt.title("Random Pixel Intensities")
+plt.axis('off')
+plt.show()
+
+# -----------------------------
+# b) Apply mathematical functions (Sinusoidal & Gaussian)
+# -----------------------------
+x = np.linspace(0, 10, 100)#Creates 100 evenly spaced values between 0 and 10 (both included).Used to generate smooth ranges of numbers.
+                            #Example idea:0, 0.10, 0.20, … , 10
+y = np.linspace(0, 10, 100)
+X, Y = np.meshgrid(x, y)#Creates a 2D coordinate grid from two 1D arrays.
+
+# Sinusoidal pattern
+sin_pattern = np.sin(X) + np.cos(Y)
+plt.figure(figsize=(4, 3))
+plt.imshow(sin_pattern, cmap='viridis')#viridis is a colormap used in Matplotlib. Colors go from dark blue → green → yellow as values increase
+plt.title("Sinusoidal Pattern")
+plt.axis('off')
+plt.show()
+
+# Gaussian pattern
+gaussian_pattern = np.exp(-(X**2 + Y**2))
+plt.figure(figsize=(4, 3))
+plt.imshow(gaussian_pattern, cmap='hot')
+plt.title("Gaussian Pattern")
+plt.axis('off')
+plt.show()
+
+# -----------------------------
+# d) Downscale an image to low resolution
+# -----------------------------
+# Create a sample image
+image = (random_grid * 255).astype(np.uint8)#It scales pixel values from (random_grid)[0,1] to [0,255].Converts the data type to 8-bit unsigned integers (uint8).
+
+# Downscale
+low_res = cv2.resize(image, (25, 25), interpolation=cv2.INTER_AREA)#This line resizes the image to a lower resolution.Changes the image size to 25 × 25 pixels
+plt.figure(figsize=(4, 3))
+plt.imshow(low_res, cmap='gray')
+plt.title("Downscaled Image")
+plt.axis('off')
+plt.show()
+
+# -----------------------------
+# Upscale back using interpolation
+# -----------------------------
+upscaled = cv2.resize(low_res, (100, 100), interpolation=cv2.INTER_LINEAR)
+plt.figure(figsize=(4, 3))
+plt.imshow(upscaled, cmap='gray')
+plt.title("Upscaled Image")
+plt.axis('off')
+plt.show()
+
+# -----------------------------
+# e) Combine features of two images by averaging pixel intensities
+# -----------------------------
+image1 = random_grid
+image2 = sin_pattern
+
+combined_image = (image1 + image2) / 2
+plt.figure(figsize=(4, 3))
+plt.imshow(combined_image, cmap='gray')
+plt.title("Combined Image (Averaged)")
+plt.axis('off')
+plt.show()
+
+COLOUR IMAGE
+
+import numpy as np
+import matplotlib.pyplot as plt
+import cv2
+
+# -----------------------------
+# a) Generate a grid of random pixel intensities (COLOR)
+# -----------------------------
+random_color = np.random.rand(100, 100, 3)
+plt.figure(figsize=(4, 3))
+plt.imshow(random_color)
+plt.title("Random Color Pixel Intensities")
+plt.axis('off')
+plt.show()
+
+# -----------------------------
+# b) Apply mathematical functions (Sinusoidal & Gaussian)
+# -----------------------------
+x = np.linspace(0, 10, 100)
+y = np.linspace(0, 10, 100)
+X, Y = np.meshgrid(x, y)
+
+# Create color sinusoidal pattern
+sin_r = np.sin(X)
+sin_g = np.cos(Y)
+sin_b = np.sin(X + Y)
+
+sin_pattern = np.stack((sin_r, sin_g, sin_b), axis=2)
+plt.figure(figsize=(4, 3))
+plt.imshow(sin_pattern)
+plt.title("Color Sinusoidal Pattern")
+plt.axis('off')
+plt.show()
+
+# Gaussian pattern (same for all channels)
+gaussian = np.exp(-(X**2 + Y**2))
+gaussian_pattern = np.stack((gaussian, gaussian, gaussian), axis=2)
+plt.figure(figsize=(4, 3))
+plt.imshow(gaussian_pattern)
+plt.title("Color Gaussian Pattern")
+plt.axis('off')
+plt.show()
+
+# -----------------------------
+# d) Downscale color image to low resolution
+# -----------------------------
+image = (random_color * 255).astype(np.uint8)
+
+low_res = cv2.resize(image, (25, 25), interpolation=cv2.INTER_AREA)
+plt.figure(figsize=(4, 3))
+plt.imshow(low_res)
+plt.title("Downscaled Color Image")
+plt.axis('off')
+plt.show()
+
+# -----------------------------
+# Upscale image using interpolation
+# -----------------------------
+upscaled = cv2.resize(low_res, (100, 100), interpolation=cv2.INTER_LINEAR)
+plt.figure(figsize=(4, 3))
+plt.imshow(upscaled)
+plt.title("Upscaled Color Image")
+plt.axis('off')
+plt.show()
+
+
+# -----------------------------
+# e) Combine two color images by averaging
+# -----------------------------
+combined_image = (random_color + sin_pattern) / 2
+plt.figure(figsize=(4, 3))
+plt.imshow(combined_image)
+plt.title("Combined Color Image (Averaged)")
+plt.axis('off')
+plt.show()
+
+
+
+
+# FROM IMG IMPORT
+
+import numpy as np
+import matplotlib.pyplot as plt
+import cv2
+import matplotlib.image as mpimg
+image = mpimg.imread("/Bmw.jpg")
+plt.figure(figsize=(4, 3))
+plt.imshow(image, cmap='gray')
+plt.title("Random Pixel Intensities")
+plt.axis('off')
+plt.show()
+# Normalize image to [0,1]
+img_norm = image / 255.0
+
+# Apply sinusoidal function
+sin_pattern = np.sin(img_norm * np.pi)
+
+plt.figure(figsize=(4, 3))
+plt.imshow(sin_pattern)
+plt.title("Sinusoidal Transformed Image")
+plt.axis('off')
+plt.show()
+# Gaussian function
+gaussian_pattern = np.exp(-(img_norm ** 2))
+
+plt.figure(figsize=(4, 3))
+plt.imshow(gaussian_pattern)
+plt.title("Gaussian Transformed Image")
+plt.axis('off')
+plt.show()
+# Convert to uint8
+image_uint8 = (img_norm * 255).astype(np.uint8)
+
+low_res = cv2.resize(image_uint8, (25, 25), interpolation=cv2.INTER_AREA)
+
+plt.figure(figsize=(4, 3))
+plt.imshow(low_res)
+plt.title("Downscaled Color Image")
+plt.axis('off')
+plt.show()
+upscaled = cv2.resize(low_res, (100, 100), interpolation=cv2.INTER_LINEAR)
+
+plt.figure(figsize=(4, 3))
+plt.imshow(upscaled)
+plt.title("Upscaled Color Image")
+plt.axis('off')
+plt.show()
+combined_image = (img_norm + sin_pattern) / 2
+
+plt.figure(figsize=(4, 3))
+plt.imshow(combined_image)
+plt.title("Combined Image (Averaged)")
+plt.axis('off')
+plt.show()
+
+
+
+
+
+
 # exp4
 
 import torch

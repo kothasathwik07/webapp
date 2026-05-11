@@ -1,458 +1,720 @@
-Exp-1 — EC2 Access
-a) Connect using PuTTY (.ppk)
-Create an EC2 with a key pair of .ppk, copy the IP of it.
-Open PuTTY, paste the IP.
-Left side: Connection → SSH → Auth → Credentials, browse the .ppk and click Open.
-If Linux login as: ec2-user, if Ubuntu login as: ubuntu.   Test: whoami (console)
-b) Convert .pem to .ppk
-Convert .pem file to .ppk using PuTTYGen, save as private key file, then follow the same process as above.
+# exp4
 
-c) RDP (Windows EC2)
-Create an EC2 — in security groups add RDP in the custom TCP, select OS: Windows.
-Click on Connect → using RDP client → click Get Password → upload the .pem file to decrypt.
-Click the Windows symbol and search RDP, paste the IP of the EC2.
-Login as Administrator, password: decrypted password.
-You can see the new system.
+import torch
+import torch.nn as nn
+import torch.optim as optim
+from torchvision import datasets, models, transforms
+from torch.utils.data import DataLoader
+from PIL import Image
+import matplotlib.pyplot as plt
+import random
+import os
 
+DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+transform = transforms.Compose([
+    transforms.Resize((224,224)),
+    transforms.ToTensor(),
+    transforms.Normalize(
+        [0.485,0.456,0.406],
+        [0.229,0.224,0.225]
+    )
+])
+dataset = datasets.Flowers102(
+    root="./data",
+    split="train",
+    download=True,
+    transform=transform
+)
+train_loader = DataLoader(
+    dataset,
+    batch_size=16,
+    shuffle=True
+)
+print("Dataset size:", len(dataset))
 
+flower_names = [
+"pink primrose","hard-leaved pocket orchid","canterbury bells","sweet pea",
+"english marigold","tiger lily","moon orchid","bird of paradise","monkshood",
+"globe thistle","snapdragon","colt's foot","king protea","spear thistle",
+"yellow iris","globe-flower","purple coneflower","peruvian lily","balloon flower",
+"giant white arum lily","fire lily","pincushion flower","fritillary",
+"red ginger","grape hyacinth","corn poppy","prince of wales feathers",
+"stemless gentian","artichoke","sweet william","carnation","garden phlox",
+"love in the mist","mexican aster","alpine sea holly","ruby-lipped cattleya",
+"cape flower","great masterwort","siam tulip","lenten rose","barbeton daisy",
+"daffodil","sword lily","poinsettia","bolero deep blue","wallflower",
+"marigold","buttercup","oxeye daisy","common dandelion","petunia","wild pansy",
+"primula","sunflower","pelargonium","bishop of llandaff","gaura",
+"geranium","orange dahlia","pink-yellow dahlia","cautleya spicata","japanese anemone",
+"black-eyed susan","silverbush","californian poppy","osteospermum","spring crocus",
+"bearded iris","windflower","tree poppy","gazania","azalea","water lily",
+"rose","thorn apple","morning glory","passion flower","lotus","toad lily",
+"anthurium","frangipani","clematis","hibiscus","columbine","desert-rose",
+"tree mallow","magnolia","cyclamen","watercress","canna lily","hippeastrum",
+"bee balm","ball moss","foxglove","bougainvillea","camellia","mallow",
+"mexican petunia","bromelia","blanket flower","trumpet creeper","blackberry lily"
+]
+vocab = {i: name for i, name in enumerate(flower_names)}
+vocab_size = len(vocab)
+print("Vocabulary size:", vocab_size)
 
-Exp-2 — Volumes & Snapshots
-Volumes
-a) Attach a Volume
-Create an EC2, select an AZ.
-Create a volume with the same AZ, size anything.
-Attach volume to the running EC2, device name: /dev/sdf.
-Open EC2 console and run lsblk.
-b) Format and Mount the Volume
-After attaching and connecting to EC2:
+class FeatureToTransformer(nn.Module):
+    def __init__(self, vocab_size, d_model=256, nhead=8):
+        super().__init__()
+        self.resnet_projection = nn.Linear(2048, d_model)
+        self.embedding = nn.Embedding(vocab_size, d_model)
+        decoder_layer = nn.TransformerDecoderLayer(
+            d_model=d_model,
+            nhead=nhead,
+            batch_first=True
+        )
+        self.transformer_decoder = nn.TransformerDecoder(
+            decoder_layer,
+            num_layers=3
+        )
+        self.fc_out = nn.Linear(d_model, vocab_size)
+    def forward(self, resnet_features, target_ids):
+        visual_memory = self.resnet_projection(resnet_features).unsqueeze(1)
+        tgt_embeddings = self.embedding(target_ids)
+        output = self.transformer_decoder(tgt_embeddings, visual_memory)
+        return self.fc_out(output)
+model = FeatureToTransformer(vocab_size).to(DEVICE)
+print("Transformer Model Ready")
+resnet50 = models.resnet50(weights="IMAGENET1K_V1")
+resnet_backbone = nn.Sequential(
+    *list(resnet50.children())[:-2]
+).to(DEVICE)
+resnet_backbone.eval()
+print("ResNet Feature Extractor Ready")
 
-sudo su
-lsblk -fs
-fdisk /dev/nvme1n1    (m, n, p, , , , w)
-lsblk
-mkfs.xfs /dev/nvme1n1p1
-mkdir /mnt/vish
-mount /dev/nvme1n1p1 /mnt/vish
-df -h
-blkid /dev/nvme1n1p1
-(COPY UUID)
-nano /etc/fstab
-(inside that, last line add) =UUID=<UUID-value>   /mnt/vish   xfs   defaults,nofail   0   0
-mount -a
-reboot and check for files
-c) Move Volume to Another EC2
-Create another EC2 with the same AZ.
-Detach the volume from the old EC2 and attach to the new one.
-Connect to the new EC2 and run:
-sudo su
-mkdir /mnt/vish
-mount /dev/nvme1n1p1 /mnt/vish
-lsblk -fs
-Snapshots
-For a given volume you created, click on Actions → Create Snapshot.
-From the Snapshots section, click on Copy Snapshot and select some region.
-Switch to that region and create a volume for it from Actions.
-Attach an EC2 in that region to the created volume with the same AZ. (run lsblk if needed)
+optimizer = optim.Adam(
+    model.parameters(),
+    lr=0.001
+)
+criterion = nn.CrossEntropyLoss()
+print("Training...")
+model.train()
+for epoch in range(5):
+    for imgs, labels in train_loader:
+        imgs = imgs.to(DEVICE)
+        labels = labels.to(DEVICE)
+        with torch.no_grad():
+            feature_map = resnet_backbone(imgs)
+            features = feature_map.mean([2,3])
+        optimizer.zero_grad()
+        outputs = model(
+            features,
+            labels.unsqueeze(1)
+        )
+        loss = criterion(
+            outputs.view(-1, vocab_size),
+            labels
+        )
+        loss.backward()
+        optimizer.step()
+        break
+    print(f"Epoch {epoch+1} Loss: {loss.item():.4f}")
 
+def visualize_features_and_caption(idx):
+    model.eval()
+    img, label = dataset[idx]
+    img_pil = transforms.ToPILImage()(img)
+    img_t = img.unsqueeze(0).to(DEVICE)
+    with torch.no_grad():
+        feature_map = resnet_backbone(img_t)
+        activation = feature_map.mean(dim=1, keepdim=True)
+        activation = F.interpolate(
+            activation,
+            size=(224,224),
+            mode="bilinear",
+            align_corners=False
+        )
+        activation = activation.squeeze().cpu().numpy()
+        features = feature_map.mean([2,3])
+        dummy = torch.zeros((1,1), dtype=torch.long).to(DEVICE)
+        logits = model(features, dummy)
+        pred = torch.argmax(logits, dim=-1).item()
+        caption = f"A photo of a {vocab[pred]}"
+    fig, axes = plt.subplots(1,2, figsize=(10,5))
+    axes[0].imshow(img_pil)
+    axes[0].set_title("Original Image")
+    axes[0].axis("off")
+    axes[1].imshow(img_pil)
+    axes[1].imshow(activation, cmap="jet", alpha=0.5)
+    axes[1].set_title(caption)
+    axes[1].axis("off")
+    plt.show()
 
-
-Exp-3 — EFS (Elastic File System)
-Create 2 EC2s with 2 different availability zones and include NFS in the custom TCP.
-Create a new security group (NFS) and attach it to the EFS
-Create an EFS with only 2 availability zones.
-Open consoles of both EC2s.
-Run the following commands on both:
-sudo su
-mkdir efs
-yum install -y amazon-efs-utils
-(connect the efs with dns) efs → connect → dns → paste in console
-cd efs
-in any 1 do: nano h.txt and put text
-(it shows in the other EC2)
-
-
-
-
-EXP-4 — S3
-a) Public Access to S3 Object
-Create an S3 bucket, allow ACLs under ownership.
-Block all public access — uncheck that (very important).
-Enable versioning (better, because others need it).
-After creation: Bucket → Permissions → ACL → Public Access → right side tick.
-Upload any image, click on it → Permissions → ACL → Public Access → left and right tick.
-Properties → Copy link → open in incognito.
-b) Versioning
-Enable versioning (compulsory).
-Upload a text file, change it locally, and upload again.
-Buckets → Objects → click Show Versions → you can see both versions.
-Delete the latest version and the old version still shows up.
-c) Cross Region Replication
-Create 1 more bucket in a different region with the same process including versioning enabled.
-Go to first bucket → Management → Replication Rules.
-Status = Enable, Source bucket = Apply to all objects, Destination bucket = select the created one, IAM Role = Lab Role. Replicate existing objects → No (this option comes after creating).
-Upload any file in bucket 1 — it will automatically show in the 2nd bucket.
-d) Static Website Hosting
-Upload index.html and error.html into S3 following the normal process including ACL settings and allowing static hosting. Put index and error filenames in the fields.
-Click on index.html → Permissions → Everyone → both tick. Same with error.html.
-Bucket → Properties → scroll to Static Website Hosting → copy URL → check.
-
-
-
-
-EXP-5 — VPC
-Create a VPC, CIDR: 10.0.0.0/16.
-Create subnets:
-Public: AZ-east-1a, subnet CIDR: 10.0.1.0/24
-Private: AZ-east-1a, subnet CIDR: 10.0.2.0/24
-Create an Internet Gateway, attach the VPC (shown after creation).
-Create Route Tables:
-Public: Create → Actions → Edit Routes → Add Route → Destination: 0.0.0.0/0, Internet Gateway (custom made) → Actions → Edit Subnet Associations → add the public subnet.
-Private: Create → Actions → Edit Subnet Associations → add the private subnet.
-Public subnet → Actions → Edit Subnet Settings → Auto-assign IP (tick).
-Create a security group, add the custom VPC under creation, inbound rules: SSH, HTTP, HTTPS.
-Create an EC2 for the public subnet: Edit Network → VPC (custom), Subnet: public, select existing security group: custom made.
-Do the same for the EC2 of the private subnet.
-Connecting to both: public subnet EC2 will connect, private will not.
-
-
-
-
-Exp-6 — Bastion Server
-Follow the same process as Exp-5 until creation of the route tables.
-Create an Elastic IP.
-Create a NAT Gateway: Method of Elastic IP → Manual, select the created IP.
-Attach the NAT Gateway to the private route table.
-Create 2 EC2 instances for public and private subnets and attach the 2 subnets.
-Open the public EC2 instance and connect it via SSH. In the terminal where .pem file is located, run:
-ssh -i "key.pem" ec2-user@<public-ip>
-Open another terminal and copy the key to the public EC2:
-scp -i yourkey.pem yourkey.pem ec2-user@<public-ip>:~
-In terminal 1 (connected to public EC2), run:
-chmod 400 yourkey.pem
-Open the EC2 with private subnet and connect it via SSH command from terminal 1:
-ssh -i yourkey.pem ec2-user@<private-ip>
-After connection success, run to check internet access:
-ping google.com
-
-
-
-
-
-
-
-
-Exp-7 — S3-DynamoDB Integration
-Create an S3 bucket normally.
-Create a DynamoDB table with a partition key as id.
-Create a Lambda function: Author from scratch, Role: LabRole, Runtime: Python.
-Add trigger to Lambda: Select S3 in trigger config, select the bucket.
-In the Lambda code, put this:
-import boto3
-from uuid import uuid4
-
-def lambda_handler(event, context):
-    s3 = boto3.client("s3")
-    dynamodb = boto3.resource('dynamodb')
-    
-    # Check if the 'Records' key is present in the event
-    if 'Records' in event:
-        # Iterate over each record in the event
-        for record in event['Records']:
-            bucket_name = record['s3']['bucket']['name']
-            object_key = record['s3']['object']['key']
-            size = record['s3']['object'].get('size', -1)
-            event_name = record.get('eventName', 'Unknown')
-            event_time = record.get('eventTime', 'Unknown')
-            
-            dynamoTable = dynamodb.Table('table-name')
-            dynamoTable.put_item(
-                Item={
-                    'id': str(uuid4()), 
-                    'Bucket': bucket_name, 
-                    'Object': object_key,
-                    'Size': size, 
-                    'Event': event_name, 
-                    'EventTime': event_time
-                })
-    else:
-        # Log a message indicating that the 'Records' key is missing
-        print("No 'Records' key found in the event.")
-Click Deploy.
-Upload something in the S3 bucket, then click Explore Items in DynamoDB, click Run.
-In Lambda, show logs if asked.
+idx = random.randint(0, len(dataset)-1)
+visualize_features_and_caption(idx)
 
 
+# exp 6
 
+import tensorflow as tf
+import keras
+import keras_hub
+import numpy as np
+from sklearn.metrics import accuracy_score, f1_score
 
-Exp-8 — SNS & SQS
-Part 1: SNS Email Notification
-Create SNS with any name, Type: Standard.
-Create subscription: Protocol: Email, Endpoint: your email.
-Confirm subscription from email.
-Publish message: Put something in subject and body, then send. 
+preset = "t5_small_multi"
+backbone = keras_hub.models.T5Backbone.from_preset(preset)
 
-Part 2: S3 to SNS Integration
-Create S3 bucket normally.
-Edit access policy of SNS and put this:
-{
-  "Version": "2012-10-17",
-  "Id": "example-ID",
-  "Statement": [
+(x_train, y_train), (x_test, y_test) = keras.datasets.imdb.load_data(num_words=20000)
+word_index = keras.datasets.imdb.get_word_index()
+reverse_word_index = dict((v, k) for k, v in word_index.items())
+
+def decode_review(text):
+    return " ".join([reverse_word_index.get(i - 3, "?") for i in text])
+
+train_texts = [decode_review(x) for x in x_train[:2000]]
+test_texts  = [decode_review(x) for x in x_test[:500]]
+train_labels = y_train[:2000]
+test_labels  = y_test[:500]
+
+max_len = 128
+vocab_size = 20000
+
+vectorizer = keras.layers.TextVectorization(
+    max_tokens=vocab_size,
+    output_mode="int",
+    output_sequence_length=max_len
+)
+
+vectorizer.adapt(train_texts)
+
+train_token_ids = vectorizer(np.array(train_texts))
+test_token_ids  = vectorizer(np.array(test_texts))
+
+train_padding_mask = tf.cast(train_token_ids != 0, tf.int32)
+test_padding_mask  = tf.cast(test_token_ids != 0, tf.int32)
+
+train_decoder_ids = tf.zeros_like(train_token_ids)
+train_decoder_mask = tf.zeros_like(train_padding_mask)
+
+test_decoder_ids = tf.zeros_like(test_token_ids)
+test_decoder_mask = tf.zeros_like(test_padding_mask)
+
+encoder_token_ids = keras.Input(shape=(max_len,), dtype="int32")
+encoder_padding_mask = keras.Input(shape=(max_len,), dtype="int32")
+decoder_token_ids = keras.Input(shape=(max_len,), dtype="int32")
+decoder_padding_mask = keras.Input(shape=(max_len,), dtype="int32")
+outputs = backbone(
     {
-      "Sid": "Example SNS topic policy",
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "s3.amazonaws.com"
-      },
-      "Action": [
-        "SNS:Publish"
-      ],
-      "Resource": "SNS topic ARN",
-      "Condition": {
-        "ArnLike": {
-          "aws:SourceArn": "s3 bucket ARN"
-        },
-        "StringEquals": {
-          "aws:SourceAccount": "account id"
-        }
-      }
+        "encoder_token_ids": encoder_token_ids,
+        "encoder_padding_mask": encoder_padding_mask,
+        "decoder_token_ids": decoder_token_ids,
+        "decoder_padding_mask": decoder_padding_mask,
     }
-  ]
-}
-Open S3 → Properties → Event Notification → Create Event Notification.
-Event name: any name, Event type: All objects create events, Destination: SNS topic.
-Test by uploading something, check email.
+)
+encoder_output = outputs["encoder_sequence_output"]
+x = keras.layers.GlobalAveragePooling1D()(encoder_output)
+x = keras.layers.Dense(128, activation="relu")(x)
+x = keras.layers.Dropout(0.3)(x)
+final_output = keras.layers.Dense(1, activation="sigmoid")(x)
 
-Part 3: SQS Basic Operations
-Create SQS, Type: Standard, any name.
-Click Send and Receive Messages, message body: some message, click Send.
-Poll messages to see the message, you can delete also.
+model = keras.Model(
+    inputs=[
+        encoder_token_ids,
+        encoder_padding_mask,
+        decoder_token_ids,
+        decoder_padding_mask,
+    ],
+    outputs=final_output,
+)
 
-Part 4: S3 → SNS → SQS → Lambda Pipeline
-Create S3, SNS, SQS normally.
-Create subscription in SNS: Protocol: SQS, Endpoint: SQS ARN.
-Add access policy in SQS by editing and putting:
-{
-  "Statement": [
-    {
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "sns.amazonaws.com"
-      },
-      "Action": "sqs:SendMessage",
-      "Resource": "SQS ARN",
-      "Condition": {
-        "ArnEquals": {
-          "aws:SourceArn": "SNS ARN"
-        }
-      }
-    }
-  ]
-}
-Add access policy in SNS also:
-{
-  "Version": "2012-10-17",
-  "Id": "example-ID",
-  "Statement": [
-    {
-      "Sid": "Example SNS topic policy",
-      "Effect": "Allow",
-      "Principal": {
-        "Service": "s3.amazonaws.com"
-      },
-      "Action": [
-        "SNS:Publish"
-      ],
-      "Resource": "SNS topic ARN",
-      "Condition": {
-        "ArnLike": {
-          "aws:SourceArn": "S3 bucket ARN"
-        },
-        "StringEquals": {
-          "aws:SourceAccount": "Account ID"
-        }
-      }
-    }
-  ]
-}
-Open S3 → Properties → Event Notification → Event name: S3UploadEvent, Event type: All object create events, Destination: SNS topic.
-Test by uploading something in S3, poll messages from SQS.
-Configure Lambda: Create Lambda function normally, add trigger: SQS, select your SQS.
-Lambda code:
-def lambda_handler(event, context):
-    for record in event['Records']:
-        print("Message received from SQS:")
-        print(record['body'])
-    
-    return {
-        'statusCode': 200,
-        'body': 'Message processed successfully'
-    }
-Deploy, upload something in S3, and this will trigger everything. Watch logs in Lambda.
+model.compile(
+    optimizer=keras.optimizers.Adam(1e-4),
+    loss="binary_crossentropy",
+    metrics=["accuracy"]
+)
+model.fit(
+    [
+        train_token_ids,
+        train_padding_mask,
+        train_decoder_ids,
+        train_decoder_mask,
+    ],
+    train_labels,
+    validation_split=0.2,
+    batch_size=8,
+    epochs=3
+)
+
+pred_probs = model.predict(
+    [   test_token_ids,
+        test_padding_mask,
+        test_decoder_ids,
+        test_decoder_mask,
+    ]
+)
+predictions = (pred_probs > 0.5).astype(int)
+print("Accuracy:", accuracy_score(test_labels, predictions))
+print("F1 Score:", f1_score(test_labels, predictions))
 
 
+# exp 7
+
+import os
+import re
+import pickle
+import numpy as np
+import pandas as pd
+import kagglehub
+
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+from tensorflow.keras.applications import ResNet50
+from tensorflow.keras.applications.resnet50 import preprocess_input
+from tensorflow.keras.preprocessing.image import load_img, img_to_array
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+from nltk.translate.bleu_score import corpus_bleu
+
+path = kagglehub.dataset_download("adityajn105/flickr8k")
+print("Dataset path:", path)
+
+class CFG:
+    BASE_DIR = path
+    IMAGE_DIR = os.path.join(BASE_DIR, "Images")
+    CAPTION_FILE = os.path.join(BASE_DIR, "captions.txt")
+    SAVE_DIR = "/kaggle/working"
+
+    MAX_IMAGES = 1000
+    CAPTIONS_PER_IMAGE = 2
+
+    IMG_SIZE = (224, 224)
+    FEAT_DIM = 2048
+
+    MAX_VOCAB = 3000
+    MAX_LEN = 25
+
+    EMBED_DIM = 128
+    LSTM_UNITS = 256
+    DENSE_DIM = 256
+    DROPOUT = 0.3
+
+    BATCH_SIZE = 128
+    EPOCHS = 5
+    LR = 3e-4
+    TRAIN_SPLIT = 0.9
+    FEAT_BATCH = 64
+
+def load_captions(path):
+    df = pd.read_csv(path)
+    captions = {}
+    for _, row in df.iterrows():
+        img = row["image"]
+        cap = row["caption"]
+        if len(captions) >= CFG.MAX_IMAGES and img not in captions:
+            continue
+        cap = re.sub(r"[^a-z\s]", "", cap.lower())
+        cap = "startseq " + cap + " endseq"
+        lst = captions.setdefault(img, [])
+        if len(lst) < CFG.CAPTIONS_PER_IMAGE:
+            lst.append(cap)
+    return captions
+captions = load_captions(CFG.CAPTION_FILE)
+
+all_caps = [c for caps in captions.values() for c in caps]
+tokenizer = Tokenizer(num_words=CFG.MAX_VOCAB, oov_token="<unk>")
+tokenizer.fit_on_texts(all_caps)
+VOCAB_SIZE = len(tokenizer.word_index) + 1
+MAX_LEN = CFG.MAX_LEN
+
+def build_resnet():
+    base = ResNet50(weights="imagenet", include_top=False,
+                    input_shape=(*CFG.IMG_SIZE, 3))
+    base.trainable = False
+    x = layers.GlobalAveragePooling2D()(base.output)
+    return keras.Model(base.input, x)
+resnet = build_resnet()
+
+def extract_features(image_dir, img_list):
+    features = {}
+    for i in range(0, len(img_list), CFG.FEAT_BATCH):
+        batch_files = img_list[i:i+CFG.FEAT_BATCH]
+        imgs, names = [], []
+        for f in batch_files:
+            try:
+                img = load_img(os.path.join(image_dir, f),
+                               target_size=CFG.IMG_SIZE)
+                imgs.append(img_to_array(img))
+                names.append(f)
+            except:
+                continue
+        batch = preprocess_input(np.array(imgs))
+        feats = resnet.predict(batch, verbose=0)
+        for name, feat in zip(names, feats):
+            features[name] = feat
+    return features
+img_features = extract_features(CFG.IMAGE_DIR, list(captions.keys()))
+
+imgs = list(img_features.keys())
+split = int(CFG.TRAIN_SPLIT * len(imgs))
+
+train_imgs = set(imgs[:split])
+test_imgs = set(imgs[split:])
+
+def build_sequences(img_set):
+    X1, X2, Y = [], [], []
+    for img in img_set:
+        feat = img_features[img]
+        for cap in captions[img]:
+            seq = tokenizer.texts_to_sequences([cap])[0]
+            for i in range(1, len(seq)):
+                X1.append(feat)
+                X2.append(pad_sequences([seq[:i]], maxlen=MAX_LEN)[0])
+                Y.append(seq[i])
+    return np.array(X1), np.array(X2), np.array(Y)
+X1, X2, Y = build_sequences(train_imgs)
+
+def build_model():
+    img_in = layers.Input(shape=(CFG.FEAT_DIM,))
+    img = layers.Dense(CFG.EMBED_DIM, activation="relu")(img_in)
+    img = layers.RepeatVector(MAX_LEN)(img)
+
+    cap_in = layers.Input(shape=(MAX_LEN,))
+    cap = layers.Embedding(VOCAB_SIZE, CFG.EMBED_DIM, mask_zero=True)(cap_in)
+
+    x = layers.Add()([img, cap])
+    x = layers.LSTM(CFG.LSTM_UNITS)(x)
+    x = layers.Dense(CFG.DENSE_DIM, activation="relu")(x)
+    out = layers.Dense(VOCAB_SIZE, activation="softmax")(x)
+
+    model = keras.Model([img_in, cap_in], out)
+    model.compile(
+        optimizer=keras.optimizers.Adam(CFG.LR),
+        loss="sparse_categorical_crossentropy",
+        metrics=["accuracy"]
+    )
+    return model
+model = build_model()
+
+train_ds = tf.data.Dataset.from_tensor_slices(((X1, X2), Y)) \
+            .shuffle(5000).batch(CFG.BATCH_SIZE)
+
+model.fit(train_ds, epochs=CFG.EPOCHS)
+
+def generate_caption(model, feat):
+    caption = ["startseq"]
+    for _ in range(MAX_LEN):
+        seq = tokenizer.texts_to_sequences([" ".join(caption)])[0]
+        seq = pad_sequences([seq], maxlen=MAX_LEN)
+        pred = model.predict([feat.reshape(1, -1), seq], verbose=0)
+        word = tokenizer.index_word.get(np.argmax(pred))
+        if word == "endseq" or word is None:
+            break
+        caption.append(word)
+    return " ".join(caption[1:])
+
+def evaluate(n=50):
+    actual, predicted = [], []
+    for img in list(img_features.keys())[:n]:
+        refs = [c.split()[1:-1] for c in captions[img]]
+        pred = generate_caption(model, img_features[img]).split()
+        actual.append(refs)
+        predicted.append(pred)
+    print("BLEU-1:", corpus_bleu(actual, predicted, weights=(1,0,0,0)))
+
+import matplotlib.pyplot as plt
+def show_image(img_name, caption=None):
+    img_path = os.path.join(CFG.IMAGE_DIR, img_name)
+    img = load_img(img_path, target_size=CFG.IMG_SIZE)
+    plt.imshow(img)
+    plt.axis("off")
+    if caption:
+        plt.title(caption)
+    plt.show()
+
+img_name = list(img_features.keys())[0]
+caption = generate_caption(model, img_features[img_name])
+show_image(img_name, caption)
+
+evaluate(25)
+
+os.makedirs(CFG.SAVE_DIR, exist_ok=True)
+model.save(os.path.join(CFG.SAVE_DIR, "model.h5"))
+with open(os.path.join(CFG.SAVE_DIR, "tokenizer.pkl"), "wb") as f:
+    pickle.dump(tokenizer, f)
 
 
-Exp-9 — ELB + Auto Scaling
-Part 1: EC2 + Load Balancer
-1) Create EC2 Instances (2 servers)
-Launch instance → Amazon Linux → t2.micro
+# exp 8
 
-Security group:
+import pandas as pd
+import torch
+from transformers import BertTokenizer, EncoderDecoderModel
+from transformers import logging
+import warnings
 
-SSH (22) → your IP
-HTTP (80) → anywhere
-Run in both:
+logging.set_verbosity_error()
+warnings.filterwarnings("ignore")
 
-sudo su
-yum update -y
-yum install httpd -y
-systemctl start httpd
-systemctl enable httpd
-Server 1:
+data = pd.read_csv("text_summary_dataset.csv").dropna()
+texts = data["text"].tolist()[:2000]
+summaries = data["summary"].tolist()[:2000]
 
-echo "This is Server 1" > /var/www/html/index.html
-Server 2:
+tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
 
-echo "This is Server 2" > /var/www/html/index.html
-Result: 2 working web servers
+model = EncoderDecoderModel.from_encoder_decoder_pretrained(
+    "bert-base-uncased",
+    "bert-base-uncased"
+)
 
-2) Create Load Balancer
-Security group: EC2 → Security Groups → Create Security Group, allow HTTP, HTTPS traffic.
-Create Load Balancer: EC2 → Load Balancers → Create Load Balancer → Application Load Balancer (everything default), select all AZ, attach the above security group.
-Create new target group: Put name, other default.
-Register targets: Attach the instances.
-Add the target group to load balancer.
+model.config.decoder_start_token_id = tokenizer.cls_token_id
+model.config.eos_token_id = tokenizer.sep_token_id
+model.config.pad_token_id = tokenizer.pad_token_id
+model.config.vocab_size = model.config.decoder.vocab_size
 
-3) Test
-Copy DNS of LB
-Open in browser
-Refresh → alternates servers
-Output: traffic distributed
-Part 2: Auto Scaling
+inputs = tokenizer(texts, padding=True, truncation=True, max_length=256, return_tensors="pt")
+labels = tokenizer(summaries, padding=True, truncation=True, max_length=64, return_tensors="pt").input_ids
+labels[labels == tokenizer.pad_token_id] = -100
 
-1) Create AMI
-EC2 → Select instance
-Actions → Image → Create Image
-Name: anything
-This is your base template
+optimizer = torch.optim.Adam(model.parameters(), lr=5e-5)
 
-2) Create Launch Template
-EC2 → Launch Templates → Create
+model.train()
+for epoch in range(10):
+    outputs = model(
+        input_ids=inputs.input_ids,
+        attention_mask=inputs.attention_mask,
+        labels=labels
+    )
+    loss = outputs.loss
+    loss.backward()
+    optimizer.step()
+    optimizer.zero_grad()
+    print("Epoch:", epoch+1, "Loss:", loss.item())
 
-Config:
+model.eval()
 
-AMI → select created AMI
-Instance type → t2.micro
-Key pair → select
-Security group → allow HTTP
+sentence = "Artificial intelligence is transforming healthcare by improving diagnosis and treatment."
+test_input = tokenizer(sentence, return_tensors="pt", truncation=True)
 
-3) Create Auto Scaling Group
-EC2 → Auto Scaling Groups → Create
+summary_ids = model.generate(
+    test_input.input_ids,
+    attention_mask=test_input.attention_mask,
+    max_length=10,
+    min_length=3,
+    num_beams=4,
+    no_repeat_ngram_size=1,
+    length_penalty=2.0,
+    early_stopping=True,
+    decoder_start_token_id=tokenizer.cls_token_id
+)
 
-Config:
+summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+clean_summary = summary.replace(" ##", "")
+print("\nInput Sentence:")
+print(sentence)
+print("\nGenerated Summary:")
+print(summary)
 
-Launch template → select
-VPC + subnets → select all
-4) Attach Load Balancer
-Select:
+# exp 9
 
-Existing Load Balancer
-Target group
-Health check:
+!pip uninstall -y transformers
+!pip install -q transformers==4.37.2
 
-Type → HTTP
-Grace period → 300 sec
-5) Set Capacity
-Desired: 2
-Min: 1
-Max: 4
-6) Create ASG
-Review → Create
+from transformers import BertTokenizer, TFBertModel
 
-Part 3: Testing
-1) Check Instances
-Target group → healthy instances
-ASG → instances running
-2) Test Auto Healing
-Terminate one instance
-Result: ASG launches new instance automatically
-3) Test Load Balancing
-Open LB DNS
-Refresh
+import os
+os.environ["TF_CPP_MIN_LOG_LEVEL"]="2"
+
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras import layers,Model
+from tensorflow.keras.applications import ResNet50
+from tensorflow.keras.applications.resnet50 import preprocess_input
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+
+print("TensorFlow version:",tf.__version__)
+
+(x_train,y_train),(x_test,y_test)=tf.keras.datasets.fashion_mnist.load_data()
+
+y_train=y_train.squeeze()
+y_test=y_test.squeeze()
+
+class_names=["t-shirt","trouser","pullover","dress","coat","sandal","shirt","sneaker","bag","ankle boot"]
+
+print("Train image shape:",x_train.shape)
+print("Test image shape :",x_test.shape)
+
+x_train=np.repeat(x_train[...,np.newaxis],3,axis=-1)
+x_test=np.repeat(x_test[...,np.newaxis],3,axis=-1)
+
+print("Train image shape (RGB):",x_train.shape)
+print("Test image shape  (RGB):",x_test.shape)
+
+def create_texts(labels):
+    texts=[]
+    for label in labels:
+        cname=class_names[int(label)]
+        texts.append(f"This image contains a {cname}.")
+    return texts
+
+train_texts=create_texts(y_train)
+test_texts=create_texts(y_test)
+
+print("Example text:",train_texts[0])
+
+TRAIN_SAMPLES=10000
+TEST_SAMPLES=2000
+
+x_train=x_train[:TRAIN_SAMPLES]
+y_train=y_train[:TRAIN_SAMPLES]
+train_texts=train_texts[:TRAIN_SAMPLES]
+
+x_test=x_test[:TEST_SAMPLES]
+y_test=y_test[:TEST_SAMPLES]
+test_texts=test_texts[:TEST_SAMPLES]
+
+print("Subset train:",x_train.shape)
+print("Subset test :",x_test.shape)
+
+MAX_WORDS=10000
+MAX_LEN=10
+
+tokenizer=Tokenizer(num_words=MAX_WORDS,oov_token="<OOV>")
+tokenizer.fit_on_texts(train_texts)
+
+x_train_text=tokenizer.texts_to_sequences(train_texts)
+x_test_text=tokenizer.texts_to_sequences(test_texts)
+
+x_train_text=pad_sequences(x_train_text,maxlen=MAX_LEN,padding="post")
+x_test_text=pad_sequences(x_test_text,maxlen=MAX_LEN,padding="post")
+
+print("Text input shape:",x_train_text.shape)
+
+BATCH_SIZE=8
+
+train_ds=tf.data.Dataset.from_tensor_slices(({"image_input":x_train,"text_input":x_train_text},y_train)).shuffle(1000).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
+
+test_ds=tf.data.Dataset.from_tensor_slices(({"image_input":x_test,"text_input":x_test_text},y_test)).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
+
+image_input=layers.Input(shape=(28,28,3),name="image_input")
+
+x_img=layers.Resizing(224,224)(image_input)
+x_img=layers.Lambda(lambda x:preprocess_input(tf.cast(x,tf.float32)))(x_img)
+
+resnet_base=ResNet50(weights="imagenet",include_top=False,input_shape=(224,224,3))
+resnet_base.trainable=False
+
+x_img=resnet_base(x_img,training=False)
+x_img=layers.GlobalAveragePooling2D()(x_img)
+x_img=layers.Dense(256,activation="relu")(x_img)
+x_img=layers.Dropout(0.3)(x_img)
+
+text_input=layers.Input(shape=(MAX_LEN,),name="text_input")
+
+x_txt=layers.Embedding(input_dim=MAX_WORDS,output_dim=128)(text_input)
+x_txt=layers.LSTM(128)(x_txt)
+x_txt=layers.Dense(128,activation="relu")(x_txt)
+x_txt=layers.Dropout(0.3)(x_txt)
+
+combined=layers.Concatenate()([x_img,x_txt])
+combined=layers.Dense(256,activation="relu")(combined)
+combined=layers.Dropout(0.4)(combined)
+
+output=layers.Dense(10,activation="softmax")(combined)
+
+model=Model(inputs=[image_input,text_input],outputs=output)
+
+model.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=1e-4),loss="sparse_categorical_crossentropy",metrics=["accuracy"])
+
+model.summary()
+
+EPOCHS=1
+
+history=model.fit(train_ds,validation_data=test_ds,epochs=EPOCHS)
+
+test_loss,test_acc=model.evaluate(test_ds)
+print("\nTest Loss    :",test_loss)
+print("Test Accuracy:",test_acc)
+
+pred_probs=model.predict(test_ds.take(1))
+pred_classes=np.argmax(pred_probs,axis=1)
+
+for batch_inputs,batch_labels in test_ds.take(1):
+    true_classes=batch_labels.numpy()
+    break
+
+print("\nSample predictions:")
+for i in range(min(10,len(pred_classes))):
+    print(f"True: {class_names[true_classes[i]]:12s} | Pred: {class_names[pred_classes[i]]}")
+
+# exp 10
+
+!pip install bert-extractive-summarizer==0.7.1
+!pip install transformers==2.2.0
+!pip install spacy==2.0.12
+
+import numpy as np
+import pandas as pd
+import matplotlib
+import matplotlib.pyplot as plt
+from summarizer import Summarizer,TransformerSummarizer
+from sklearn.metrics import accuracy_score
+import warnings
+warnings.filterwarnings('ignore')
+
+df=pd.read_csv('water_problem_nlp_en_for_Kaggle_100.csv',delimiter=';',header=0)
+df=df.fillna(0)
+convert_dict={'text':str,'env_problems':int,'pollution':int,'treatment':int,'climate':int,'biomonitoring':int}
+df=df.astype(convert_dict)
+df=df[:5]
+df
+df.info()
+df['text'].head(10)
+df['text'].str.len().max()
+
+max_length=400
+i=0
+bodies=[]
+while i<len(df):
+    body=""
+    body_empty=True
+    while(len(body)<max_length)and(i<len(df)):
+        if body_empty:
+            body=df.loc[i,'text']
+            body_empty=False
+        else:
+            body+=" "+df.loc[i,'text']
+        i+=1
+    bodies.append(body)
+    print("Length of blocks =",len(body))
+
+print(f"\nNumber of text blocks = {len(bodies)}\n")
+print("Text blocks:\n",bodies)
+
+min_length_text=40
+
+bert_summary=[]
+for i in range(len(bodies)):
+    bert_model=Summarizer()
+    bert_summary.append(''.join(bert_model(bodies[i],min_length=min_length_text)))
+
+gpt_summary=[]
+for i in range(len(bodies)):
+    GPT2_model=TransformerSummarizer(transformer_type="GPT2",transformer_model_key="gpt2-medium")
+    gpt_summary.append(''.join(GPT2_model(bodies[i],min_length=min_length_text)))
+
+xlnet_summary=[]
+for i in range(len(bodies)):
+    model=TransformerSummarizer(transformer_type="XLNet",transformer_model_key="xlnet-base-cased")
+    xlnet_summary.append(''.join(model(bodies[i],min_length=min_length_text)))
+
+print("All Summarizing Results:\n")
+for i in range(len(bodies)):
+    print("ORIGINAL TEXT:")
+    print(bodies[i])
+    print("\nBERT Summarizing Result:")
+    print(bert_summary[i])
+    print("\nGPT-2 Summarizing Result:")
+    print(gpt_summary[i])
+    print("\nXLNet Summarizing Result:")
+    print(xlnet_summary[i])
+    print("\n\n")
 
 
-
-
-Exp-10 — Elastic Beanstalk
-Create Elastic Beanstalk, some name.
-Create environment → Web server environment.
-Platform: Tomcat.
-Upload WAR code from: https://tomcat.apache.org/tomcat-6.0-doc/appdev/sample/
-Role: LabRole, Key pair: select.
-Configure network: VPC (default), Subnets, Enable public IP.
-Instance: t2.micro, Type: Load Balancer, Min: 1, Max: 2.
-Create.
-Open the URL (domain link).
-Upload and Deploy → Upload same with different version label, and open URL again.
-
-
-
-
-Exp-11 — Amazon Lex
-Open Lex → Create bot → Name (everything default).
-Intent → Some name → Add utterances:
-I want to book a hotel
-Book a room
-Reserve hotel
-I need a room
-Create slots:
-age → number → question
-Advanced → Branch → if {age} < 18 → message: not eligible
-More slots: city, date, nights
-Custom slot:
-Slot types → Add slot type → Add blank slot type
-RoomType: single, double, suite
-Add slot RoomType, Advanced → Slot prompts → More prompt options → Add → Add card groups → button.
-Initial Response:
-Welcome to Hotel Booking! What is your name?
-Confirmation:
-Do you want to confirm booking in {location} for {nights} nights?
-Build → Test.
-
-
-
-
-Exp-12 — Creating IAM User with Permissions
-IAM → IAM users → Create → Name → Provide user access (tick).
-Give credentials, Access: AmazonS3FullAccess.
-Login, try creating EC2 (will not happen), create bucket.
-IAM → Users → Security credentials → Create access key → CLI.
-In CMD on your system:
-aws configure
-Enter:
-
-Access Key ID
-Secret Access Key
-Default region: (e.g., ap-south-1)
-Default output: json
-Run commands:
-
-aws s3 ls
-aws s3 mb s3://your-unique-bucket-name
-aws iam list-users   (won't work)
-
-
-
-
-Exp-13 — IAM Roles
-IAM Console → Roles → Create role.
-Use case: Choose EC2.
-Permissions: AmazonS3FullAccess.
-Name (something), Create.
-Create EC2 instance normally.
-Actions → Security → Modify IAM role.
-Select EC2-S3-Role → Update.
-Connect to EC2 and run:
-aws s3 ls
-aws ec2 describe-instances   (doesn't work)
